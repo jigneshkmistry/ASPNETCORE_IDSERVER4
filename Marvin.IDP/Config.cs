@@ -26,6 +26,8 @@ namespace Marvin.IDP
                     {
                         new Claim("given_name", "Frank"),
                         new Claim("family_name", "Underwood"),
+                        new Claim("address", "Main Road 1"),
+                        new Claim("role", "FreeUser")
                     }
                 },
                 new TestUser
@@ -38,6 +40,8 @@ namespace Marvin.IDP
                     {
                         new Claim("given_name", "Claire"),
                         new Claim("family_name", "Underwood"),
+                        new Claim("address", "Big Street 2"),
+                        new Claim("role", "PayingUser")
                     }
                 }
             };
@@ -49,7 +53,21 @@ namespace Marvin.IDP
             return new List<IdentityResource>
             {
                 new IdentityResources.OpenId(),
-                new IdentityResources.Profile()
+                new IdentityResources.Profile(),
+                new IdentityResources.Address(),
+                new IdentityResource("roles",
+                    "Your role(s)",
+                    new List<string>(){ "role"})
+            };
+        }
+
+        // api-related resources (scopes)
+        public static IEnumerable<ApiResource> GetApiResources()
+        {
+            return new List<ApiResource>
+            {
+                new ApiResource("imagegalleryapi", "Image Gallery API",
+                new List<string>() {"role" } )
             };
         }
 
@@ -66,14 +84,17 @@ namespace Marvin.IDP
                     {
                         "https://localhost:44335/signin-oidc"
                     },
-                    //PostLogoutRedirectUris = new List<string>()
-                    //{
-                    //    "https://localhost:44335/signout-callback-oidc"
-                    //},
+                    PostLogoutRedirectUris = new List<string>()
+                    {
+                        "https://localhost:44335/signout-callback-oidc"
+                    },
                     AllowedScopes =
                     {
-                        IdentityServerConstants.StandardScopes.OpenId
-                        //IdentityServerConstants.StandardScopes.Profile
+                        IdentityServerConstants.StandardScopes.OpenId,
+                        IdentityServerConstants.StandardScopes.Profile,
+                        IdentityServerConstants.StandardScopes.Address,
+                        "roles",
+                        "imagegalleryapi"
                     },
                     ClientSecrets =
                     {

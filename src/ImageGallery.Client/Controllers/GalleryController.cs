@@ -1,10 +1,15 @@
-﻿using ImageGallery.Client.Services;
+﻿using IdentityModel.Client;
+using ImageGallery.Client.Services;
 using ImageGallery.Client.ViewModels;
 using ImageGallery.Model;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -12,6 +17,7 @@ using System.Threading.Tasks;
 
 namespace ImageGallery.Client.Controllers
 {
+    [Authorize]
     public class GalleryController : Controller
     {
         private readonly IImageGalleryHttpClient _imageGalleryHttpClient;
@@ -23,6 +29,9 @@ namespace ImageGallery.Client.Controllers
 
         public async Task<IActionResult> Index()
         {
+
+            await WriteOutIdentityInformation();
+
             // call the API
             var httpClient = await _imageGalleryHttpClient.GetClient(); 
 
@@ -36,7 +45,12 @@ namespace ImageGallery.Client.Controllers
                     JsonConvert.DeserializeObject<IList<Image>>(imagesAsString).ToList());
 
                 return View(galleryIndexViewModel);
-            }          
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized ||
+                  response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+            {
+                return RedirectToAction("AccessDenied", "Authorization");
+            }
 
             throw new Exception($"A problem happened while calling the API: {response.ReasonPhrase}");
         }
@@ -111,12 +125,14 @@ namespace ImageGallery.Client.Controllers
        
             throw new Exception($"A problem happened while calling the API: {response.ReasonPhrase}");
         }
-        
+
+        [Authorize(Roles = "PayingUser")]
         public IActionResult AddImage()
         {
             return View();
         }
 
+        [Authorize(Roles = "PayingUser")]
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> AddImage(AddImageViewModel addImageViewModel)
@@ -160,6 +176,51 @@ namespace ImageGallery.Client.Controllers
             }
 
             throw new Exception($"A problem happened while calling the API: {response.ReasonPhrase}");
-        }               
+        }
+
+        [Authorize(Roles= "PayingUser")]
+        public async Task<IActionResult> OrderFrame()
+        {
+            var discoveryClient = new DiscoveryClient("https://localhost:44308/");
+            var metaDataResponse = await discoveryClient.GetAsync();
+
+            var userInfoClient = new UserInfoClient(metaDataResponse.UserInfoEndpoint);
+            var accessToken = await HttpContext.GetTokenAsync(OpenIdConnectParameterNames.AccessToken);
+            var response = await userInfoClient.GetAsync(accessToken);
+
+            if (response.IsError)
+            {
+                throw new Exception(
+                    "Problem accessing the UserInfo endpoint"
+                    , response.Exception);
+            }
+
+            var address = response.Claims.FirstOrDefault(c => c.Type == "address")?.Value;
+            return View(new OrderFrameViewModel(address));
+        }
+
+
+        public async Task WriteOutIdentityInformation()
+        {
+            // get the saved identity token
+            var identityToken = await HttpContext
+                .GetTokenAsync(OpenIdConnectParameterNames.IdToken);
+
+            // write it out
+            Debug.WriteLine($"Identity token: {identityToken}");
+
+            // write out the user claims
+            foreach (var claim in User.Claims)
+            {
+                Debug.WriteLine($"Claim type: {claim.Type} - Claim value: {claim.Value}");
+            }
+        }
+
+        public async Task Logout()
+        {
+            // Clears the  local cookie ("Cookies" must match name from scheme)
+            await HttpContext.SignOutAsync("Cookies");
+            await HttpContext.SignOutAsync("oidc");
+        }
     }
 }
